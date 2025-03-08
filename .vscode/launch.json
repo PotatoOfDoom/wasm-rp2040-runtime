@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+{
+            "preLaunchTask": "rust: cargo build",
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "Debug (Release)",
+            "chip": "RP235x",
+            "connectUnderReset": false,
+            "cwd": "${workspaceFolder}",
+            "speed": 4000,
+            "runtimeExecutable": "probe-rs",
+            "runtimeArgs": [
+                "dap-server"
+            ],
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "rttEnabled": true,
+                    "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/wasm-rp2040-runtime",
+                    "svdFile": "./rp235x.svd"
+                }
+            ],
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "haltAfterReset": true
+            },
+            "consoleLogLevel": "Info", //Error, Warn, Info, Debug, Trace
+            "wireProtocol": "Swd"
+        }
+    ]
+}

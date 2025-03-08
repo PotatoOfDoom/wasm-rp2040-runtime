@@ -6,21 +6,34 @@ use core::ptr::addr_of_mut;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
+use embassy_rp::{block::ImageDef, gpio};
+use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::pio_programs::ws2812::{PioWs2812, PioWs2812Program};
 use embassy_time::{Duration, Ticker};
 use embedded_alloc::LlffHeap as Heap;
 use smart_leds::RGB8;
-use tinywasm::{Module, Store};
+use tinywasm::{Module, ModuleInstance, Store};
 use {defmt_rtt as _, panic_probe as _};
+
+#[unsafe(link_section = ".start_block")]
+#[used]
+pub static IMAGE_DEF: ImageDef = ImageDef::non_secure_exe();
+
+#[unsafe(link_section = ".bi_entries")]
+#[used]
+pub static PICOTOOL_ENTRIES: [embassy_rp::binary_info::EntryAddr; 4] = [
+    embassy_rp::binary_info::rp_program_name!(c"Blinky Example"),
+    embassy_rp::binary_info::rp_program_description!(
+        c"This example tests the RP Pico on board LED, connected to gpio 25"
+    ),
+    embassy_rp::binary_info::rp_cargo_version!(),
+    embassy_rp::binary_info::rp_program_build_attribute!(),
+];
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
-
-bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
-});
 
 /// Input a value 0 to 255 to get a color value
 /// The colours are a transition r - g - b - back to r.
@@ -44,13 +57,14 @@ fn wasm_color_to_real(wasm_color: i32) -> RGB8 {
     RGB8 { r, g, b }
 }
 
-static WASM: &[u8; 239] = include_bytes!("../wasm/target/wasm32-unknown-unknown/release/wasm_blink.wasm");
+static WASM: &[u8; 239] =
+    include_bytes!("../wasm/target/wasm32-unknown-unknown/release/wasm_blink.wasm");
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     {
         use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 1024;
+        const HEAP_SIZE: usize = 1024 * 20;
         static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
         unsafe { HEAP.init(addr_of_mut!(HEAP_MEM) as usize, HEAP_SIZE) }
     }
@@ -58,9 +72,9 @@ async fn main(_spawner: Spawner) {
     info!("Start");
     let p = embassy_rp::init(Default::default());
 
-    let Pio {
-        mut common, sm0, ..
-    } = Pio::new(p.PIO0, Irqs);
+    let mut led = Output::new(p.PIN_25, Level::Low);
+
+    led.set_high();
 
     // This is the number of leds in the string. Helpfully, the sparkfun thing plus and adafruit
     // feather boards for the 2040 both have one built in.
@@ -70,16 +84,18 @@ async fn main(_spawner: Spawner) {
     // Common neopixel pins:
     // Thing plus: 8
     // Adafruit Feather: 16;  Adafruit Feather+RFM95: 4
-    let program = PioWs2812Program::new(&mut common);
-    let mut ws2812 = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
+    // let mut ws2812 = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
     let mut store = Store::new();
 
-    //let module = Module::parse_bytes(WASM);
-    //let instance = module.instantiate(&mut store, None).unwrap();
-    //let calc_color = instance
-    //    .exported_func::<i32, i32>(&store, "calc_color")
-    //    .unwrap();
+    let module = Module::parse_bytes(WASM).unwrap();
+    info!("Module parsed");
+    let instance = ModuleInstance::instantiate(&mut store, module, None).unwrap();
+    /*
+    let calc_color = instance
+        .exported_func::<i32, i32>(&store, "calc_color")
+        .unwrap();
+    */
 
     // Loop forever making RGB values and pushing them out to the WS2812.
     let mut ticker = Ticker::every(Duration::from_millis(10));
@@ -100,7 +116,8 @@ async fn main(_spawner: Spawner) {
 
                 debug!("R: {} G: {} B: {}", data[i].r, data[i].g, data[i].b);
             }
-            ws2812.write(&data).await;
+            // ws2812.write(&data).await;
+            led.set_high();
 
             ticker.next().await;
         }

@@ -1,10 +1,10 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-#runner = "probe-rs run --chip RP2040"
-runner = "elf2uf2-rs -d"
-rustflags = ["--cfg", "portable_atomic_unsafe_assume_single_core"]
+runner = "probe-rs run --chip RP235x"
+#runner = "elf2uf2-rs -d"
+#rustflags = ["--cfg", "portable_atomic_unsafe_assume_single_core"]
 
 [build]
-target = "thumbv6m-none-eabi"
+target = "thumbv8m.main-none-eabihf"
 
 [env]
-DEFMT_LOG = "info"
+DEFMT_LOG = "debug"
